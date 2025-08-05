@@ -19,19 +19,39 @@ export default function VoiceNoteInput({ onTranscribed, conversationHistoryArray
   // Start recording
   const startRecording = async () => {
     setError("");
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      console.log("Microphone access granted");
       streamRef.current = stream;
+
+      // For iOS Safari fallback, make sure MediaRecorder is polyfilled
       const mediaRecorder = new window.MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
+
       mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data);
+        if (e.data.size > 0) {
+          chunksRef.current.push(e.data);
+        }
       };
-      mediaRecorder.onstop = handleStop;
+
+      mediaRecorder.onstop = () => {
+        const audioBlob = new Blob(chunksRef.current, { type: 'audio/webm' });
+
+        if (audioBlob.size === 0) {
+          console.warn('Empty blob - possibly failed recording on mobile.');
+          setError("No audio captured. Try again.");
+          return;
+        }
+
+        sendToBackend(audioBlob);
+      };
+
       mediaRecorder.start();
       setRecording(true);
     } catch (err) {
+      console.error("getUserMedia error:", err);
       setError(`Microphone access denied or not available. ${err.message}`);
     }
   };
@@ -49,42 +69,41 @@ export default function VoiceNoteInput({ onTranscribed, conversationHistoryArray
     }
   };
 
-  // Handle stop: send audio to backend for transcription
-
-    const handleStop = async () => {
-        setLoading(true);
-        setError("");
-        const audioBlob = new Blob(chunksRef.current, { type: "audio/webm" });
-        const formData = new FormData();
-        formData.append("file", audioBlob, "voicenote.webm");
-        formData.append("conversation_history", JSON.stringify(conversationHistoryArray));
-        
-        try {
-            const isDevelopment =
-                typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.MODE === 'development';
-            const API_URL = isDevelopment
-                ? 'http://localhost:8000/api/v1/voicenote'
-                : 'https://selcom-bot-neurotech-1.onrender.com/api/v1/voicenote';
-            
-            const res = await fetch(API_URL, {
-                method: "POST",
-                body: formData,
-            });
-            
-            if (!res.ok) throw new Error("Transcription failed");
-            const data = await res.json();
-            
-            if (data) {
-                onTranscribed(data);
-            } else {
-                setError("No response returned from server.");
-            }
-        } catch (err) {
-            setError(`Failed to transcribe audio. ${err.message}`);
-        } finally {
-            setLoading(false);
-        }
-    };
+  // Send audio to backend for transcription
+  const sendToBackend = async (audioBlob) => {
+    setLoading(true);
+    setError("");
+    
+    const formData = new FormData();
+    formData.append("file", audioBlob, "voicenote.webm");
+    formData.append("conversation_history", JSON.stringify(conversationHistoryArray));
+    
+    try {
+      const isDevelopment =
+        typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.MODE === 'development';
+      const API_URL = isDevelopment
+        ? 'http://localhost:8000/api/v1/voicenote'
+        : 'https://selcom-bot-neurotech-1.onrender.com/api/v1/voicenote';
+      
+      const res = await fetch(API_URL, {
+        method: "POST",
+        body: formData,
+      });
+      
+      if (!res.ok) throw new Error("Transcription failed");
+      const data = await res.json();
+      
+      if (data) {
+        onTranscribed(data);
+      } else {
+        setError("No response returned from server.");
+      }
+    } catch (err) {
+      setError(`Failed to transcribe audio. ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="flex flex-col items-center gap-2 mt-2">
