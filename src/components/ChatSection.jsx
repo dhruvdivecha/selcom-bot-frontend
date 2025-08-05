@@ -152,6 +152,10 @@ export default function ChatSection() {
                     {
                         role: "bot",
                         content: result.response,
+                        video_links: result.video_links || [],
+                        response_type: result.response_type,
+                        confidence: result.confidence,
+                        language: result.language,
                         time: new Date().toLocaleTimeString(),
                     }
                 ]);
