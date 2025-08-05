@@ -60,7 +60,13 @@ export default function VoiceNoteInput({ onTranscribed, conversationHistoryArray
         formData.append("conversation_history", JSON.stringify(conversationHistoryArray));
         
         try {
-            const res = await fetch("/api/v1/voicenote", {
+            const isDevelopment =
+                typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.MODE === 'development';
+            const API_URL = isDevelopment
+                ? 'http://localhost:8000/api/v1/voicenote'
+                : 'https://selcom-bot-neurotech-1.onrender.com/api/v1/voicenote';
+            
+            const res = await fetch(API_URL, {
                 method: "POST",
                 body: formData,
             });
