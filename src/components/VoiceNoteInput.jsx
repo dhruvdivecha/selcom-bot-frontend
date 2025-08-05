@@ -21,23 +21,47 @@ export default function VoiceNoteInput({ onTranscribed, conversationHistoryArray
     setError("");
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          sampleRate: 44100
+        } 
+      });
       console.log("Microphone access granted");
       streamRef.current = stream;
 
+      // Try different MIME types for better mobile compatibility
+      let options = { mimeType: 'audio/webm' };
+      
+      if (!MediaRecorder.isTypeSupported('audio/webm')) {
+        if (MediaRecorder.isTypeSupported('audio/mp4')) {
+          options = { mimeType: 'audio/mp4' };
+        } else if (MediaRecorder.isTypeSupported('audio/wav')) {
+          options = { mimeType: 'audio/wav' };
+        } else {
+          options = {}; // Use default
+        }
+      }
+      
+      console.log("Using MediaRecorder with options:", options);
+
       // For iOS Safari fallback, make sure MediaRecorder is polyfilled
-      const mediaRecorder = new window.MediaRecorder(stream);
+      const mediaRecorder = new window.MediaRecorder(stream, options);
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
 
       mediaRecorder.ondataavailable = (e) => {
         if (e.data.size > 0) {
+          console.log("Audio data chunk received:", e.data.size, "bytes");
           chunksRef.current.push(e.data);
         }
       };
 
       mediaRecorder.onstop = () => {
-        const audioBlob = new Blob(chunksRef.current, { type: 'audio/webm' });
+        const mimeType = mediaRecorder.mimeType || options.mimeType || 'audio/webm';
+        const audioBlob = new Blob(chunksRef.current, { type: mimeType });
+        console.log("Recording stopped. Final blob:", audioBlob.size, "bytes, type:", audioBlob.type);
 
         if (audioBlob.size === 0) {
           console.warn('Empty blob - possibly failed recording on mobile.');
@@ -74,8 +98,22 @@ export default function VoiceNoteInput({ onTranscribed, conversationHistoryArray
     setLoading(true);
     setError("");
     
+    console.log("Audio blob size:", audioBlob.size);
+    console.log("Audio blob type:", audioBlob.type);
+    
+    // Try different audio formats for better mobile compatibility
+    let filename = "voicenote.webm";
+    let mimeType = audioBlob.type;
+    
+    // For iOS Safari, try different formats
+    if (mimeType.includes("mp4") || mimeType.includes("m4a")) {
+      filename = "voicenote.m4a";
+    } else if (mimeType.includes("wav")) {
+      filename = "voicenote.wav";
+    }
+    
     const formData = new FormData();
-    formData.append("file", audioBlob, "voicenote.webm");
+    formData.append("file", audioBlob, filename);
     formData.append("conversation_history", JSON.stringify(conversationHistoryArray));
     
     try {
@@ -85,13 +123,24 @@ export default function VoiceNoteInput({ onTranscribed, conversationHistoryArray
         ? 'http://localhost:8000/api/v1/voicenote'
         : 'https://selcom-bot-neurotech-1.onrender.com/api/v1/voicenote';
       
+      console.log("Sending to:", API_URL);
+      console.log("File size:", audioBlob.size, "bytes");
+      
       const res = await fetch(API_URL, {
         method: "POST",
         body: formData,
       });
       
-      if (!res.ok) throw new Error("Transcription failed");
+      console.log("Response status:", res.status);
+      
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error("Backend error response:", errorText);
+        throw new Error(`Transcription failed (${res.status}): ${errorText}`);
+      }
+      
       const data = await res.json();
+      console.log("Backend response:", data);
       
       if (data) {
         onTranscribed(data);
@@ -99,6 +148,7 @@ export default function VoiceNoteInput({ onTranscribed, conversationHistoryArray
         setError("No response returned from server.");
       }
     } catch (err) {
+      console.error("Transcription error:", err);
       setError(`Failed to transcribe audio. ${err.message}`);
     } finally {
       setLoading(false);
