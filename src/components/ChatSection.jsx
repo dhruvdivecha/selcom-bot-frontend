@@ -75,7 +75,7 @@ export default function ChatSection() {
   };
 
   return (
-    <div className="chat-container bg-zinc-800 rounded-xl shadow-lg w-[95%] max-w-[900px] h-screen flex flex-col overflow-hidden border border-zinc-700 mx-auto">
+    <div className="chat-container bg-zinc-800 rounded-xl shadow-lg w-[95%] max-w-[900px] h-[100dvh] md:h-screen flex flex-col overflow-hidden border border-zinc-700 mx-auto">
       {/* Header */}
       <div className="chat-header bg-zinc-900 text-zinc-100 py-4 px-5 text-center text-base font-semibold border-b border-zinc-700 tracking-wide">
         <span role="img" aria-label="robot">🤖</span> Selcom Chatbot Tester
